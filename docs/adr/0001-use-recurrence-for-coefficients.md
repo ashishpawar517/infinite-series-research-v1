@@ -1,0 +1,3 @@
+# Use recurrence relation for Ramanujan coefficients
+
+We decided to compute Ramanujan's coefficients c_n using the recurrence relation c_n = c_{n-1} × (4n-3)(4n-2)(4n-1)(4n) / (n^4 × 396^4) rather than direct factorial computation c_n = (4n)!/(n)!^4/396^(4n) to avoid calculating large intermediate factorials that would cause performance issues and potential overflow, even with arbitrary precision arithmetic. The recurrence provides the same mathematical result with better computational efficiency.

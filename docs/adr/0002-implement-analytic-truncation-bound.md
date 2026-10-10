@@ -1,0 +1,3 @@
+# Implement analytic truncation-error bound
+
+We decided to implement the analytic truncation-error bound for Ramanujan's series as described in Section 4 of the project plan, which provides a mathematically proven upper bound on the truncation error. This bound is valuable for users to understand the guaranteed accuracy of their calculations, though we clearly label it as not covering rounding errors from finite-precision arithmetic. The implementation follows the derivation: if S_N = sum of first N terms and B_N bounds the remainder T_N, then 0 ≤ π_N - π ≤ K × B_N / S_N^2 where K = 9801/(2√2).
