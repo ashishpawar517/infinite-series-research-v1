@@ -25,7 +25,11 @@ def parse_expression(src: str) -> float:
     Based on the parser from the original HTML file.
     """
     # Remove whitespace and normalize
-    s = src.replace(/\s+/g, '').replace(/√/g, 'sqrt').replace(/root/g, 'sqrt').replace(/π/g, 'pi')
+    s = src
+    s = re.sub(r'\s+', '', s)
+    s = s.replace('√', 'sqrt')
+    s = s.replace('root', 'sqrt')
+    s = s.replace('π', 'pi')
     i = 0
 
     # Mathematical functions
@@ -305,7 +309,7 @@ def pi_series(x: float, N: int = 40) -> List[Dict[str, Any]]:
         if r:
             p, q = r
             c = p / q
-            lhs = f"\\frac{{{p}}}{{{q if q != 1 else ''}}\\pi}"
+            lhs = f"\\frac{{{p}}}{{{q if q != 1 else ''}}} \\pi"
             pre = '' if c == 1 else f"\\frac{{{p}}}{{{q}}} \\cdot "
 
             # Ramanujan series
@@ -321,9 +325,22 @@ def pi_series(x: float, N: int = 40) -> List[Dict[str, Any]]:
                 rm_terms.append(c * 2 * math.SQRT2 / 9801 * T * (1103 + 26390*n))
                 ch_terms.append(c * 12 / (640320**1.5) * ((-1)**n) * M * (13591409 + 545140134*n))
 
+            # Format the Ramanujan tex with proper escaping
+            pre_part = pre if pre else ""
+            # For f-strings, we need to escape braces by doubling them
+            # \frac{2\sqrt{2}}{9801}\sum_{n=0}^{\infty} \frac{(4n)! (1103+26390n)}{(n!)^{4} 396^{4n}}
+            # In f-string: {{\frac{{2\sqrt{{2}}}}{{9801}}\sum_{{n=0}}^{{\infty}} \frac{{(4n)! (1103+26390n)}}{{(n!)^{4}} 396^{4n}}}}
+            # Let me try a much simpler approach - just double all braces as needed for f-string
+            # Original: \frac{2\sqrt{2}}{9801} \sum_{n=0}^{\infty} \frac{(4n)! \, (1103+26390n)}{(n!)^{4} 396^{4n}}
+            # For f-string: double all { and } that are meant to be literal
+# Format the Ramanujan tex with proper escaping
+            pre_part = pre if pre else ""
+            # \frac{2\sqrt{2}}{9801}\sum_{n=0}^{\infty} \frac{(4n)! (1103+26390n)}{(n!)^{4} 396^{4n}}
+            tex_ramanujan = f"{lhs} = {pre_part}\\frac{{2\\sqrt{{2}}}}{{9801}} \\sum_{{n=0}}^{{{\\infty}}} \\frac{{(4n)! \\, (1103+26390n)}}{{(n!)^{4}} 396^{{4n}}}}"
+
             results.append({
                 'name': 'Ramanujan 1914 (~8 digits/term)',
-                'tex': f"{lhs} = {pre}\\frac{{2\\sqrt{{2}}}}{{9801}}\\sum_{{n=0}}^{{\\infty}} \\frac{{(4n)! \\, (1103+26390n)}}{{(n!)^{4}\\, 396^{4n}}}",
+                'tex': tex_ramanujan,
                 'note': 'Ramanujan 1914. Each term adds about 8 correct digits.',
                 'color': '--d',
                 'det': '',
@@ -331,9 +348,14 @@ def pi_series(x: float, N: int = 40) -> List[Dict[str, Any]]:
                 'terms': rm_terms
             })
 
+            # Format the Chudnovsky tex with proper escaping
+            # \frac{12}{640320^{3/2}}\sum_{n=0}^{\infty} \frac{(-1)^{n}(6n)! (13591409+545140134n)}{(3n)! (n!)^{3} 640320^{3n}}
+            # In f-string: {{\frac{{12}}{{640320^{{3/2}}}}\sum_{{n=0}}^{{\\infty}} \frac{{(-1)^{n}(6n)! \\, (13591409+545140134n)}}{{(3n)! \\, (n!)^{3}}\\, 640320^{3n}}}}
+            tex_chudnovsky = rf"{lhs} = {pre_part}\frac{{12}}{{640320^{{3/2}}}} \sum_{{n=0}}^{{{\infty}}} \frac{{(-1)^{n}(6n)! \\, (13591409+545140134n)}}{{(3n)! \\, (n!)^{3}}\\, 640320^{{3n}}}}"
+
             results.append({
                 'name': 'Chudnovsky (~14 digits/term)',
-                'tex': f"{lhs} = {pre}\\frac{{12}}{{640320^{{3/2}}}}\\sum_{{n=0}}^{{\\infty}} \\frac{{(-1)^{n}(6n)! \\, (13591409+545140134n)}}{{(3n)! \\, (n!)^{3}\\, 640320^{3n}}}",
+                'tex': tex_chudnovsky,
                 'note': 'Chudnovsky 1987. Each term adds about 14 correct digits.',
                 'color': '--e',
                 'det': '',
@@ -354,9 +376,15 @@ def pi_series(x: float, N: int = 40) -> List[Dict[str, Any]]:
                 term_val = c * ((-1)**n) / (2*n+1) * (16/(5**(2*n+1)) - 4/(239**(2*n+1)))
                 machin_terms.append(term_val)
 
+            # Format the Machin tex with proper escaping
+            # k\pi = k\sum_{n=0}^{\infty} \frac{(-1)^{n}}{2n+1} \left( \frac{16}{5^{2n+1}} - \frac{4}{239^{2n+1}} \right)
+            # In f-string: {k}\\pi = {k}\\sum_{{n=0}}^{{\\infty}} \\frac{{(-1)^{n}}}{{2n+1}} \\left( \\frac{{16}}{{5^{{2n+1}}}} - \\frac{{4}}{{239^{{2n+1}}}} \\right)
+            k_part = k if k else ""
+            tex_machin = f"{k_part}\\\\pi = {k_part}\\\\sum_{{n=0}}^{{\\{\\\\infty\\}}} \\\\frac{{\\((-1)\\{\\^{n\\}}\\)}}{{\\{2n+1\\}}} \\\\left( \\\\frac{{\\{16\\}}}{{\\{5\\^{{2n+1\\}}}}} - \\\\frac{{\\{4\\}}}{{\\{239\\^{{2n+1\\}}}}} \\\\right)"
+
             results.append({
                 'name': 'Machin formula (~1.4 digits/term)',
-                'tex': f"{k}\\pi = {k}\\sum_{{n=0}}^{{\\infty}} \\frac{{(-1)^{n}}}{{2n+1}} \\left( \\frac{{16}}{{5^{{2n+1}}}} - \\frac{{4}}{{239^{{2n+1}}}} \\right)",
+                'tex': tex_machin,
                 'note': 'Machin 1706: π = 16 arctan(1/5) − 4 arctan(1/239), expanded as one series.',
                 'color': '--d',
                 'det': '',
@@ -431,4 +459,4 @@ def compute():
 
 
 if __name__ == '__main__':
-    app.run(debug=True, host='0.0.0.0', port=5000)
+    app.run(debug=True, host='127.0.0.1', port=5000)
