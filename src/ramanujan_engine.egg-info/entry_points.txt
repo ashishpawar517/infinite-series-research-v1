@@ -1,0 +1,2 @@
+[console_scripts]
+ramanujan-pi = ramanujan_engine.cli:main
