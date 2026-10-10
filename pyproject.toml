@@ -1,0 +1,47 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ramanujan-engine"
+version = "0.1.0"
+description = "A reliable arbitrary-precision engine for evaluating infinite series, starting with Ramanujan's rapidly convergent series for 1/pi"
+readme = "README.md"
+requires-python = ">=3.11"
+license = {text = "MIT"}
+authors = [
+    {name = "Aashish Pawar"}
+]
+keywords = ["mathematics", "infinite series", "ramanujan", "pi", "arbitrary precision"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Scientific/Engineering :: Mathematics",
+]
+
+[project.urls]
+Homepage = "https://github.com/ashishpawar517/infinite-series-research-v1"
+Documentation = "https://github.com/ashishpawar517/infinite-series-research-v1#readme"
+
+[project.scripts]
+ramanujan-pi = "ramanujan_engine.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+ramanujan_engine = ["py.typed"]
+
+[tool.pyright]
+reportMissingTypeStubs = false
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = ["-v"]
