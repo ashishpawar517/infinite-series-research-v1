@@ -1,4 +1,14 @@
-"""Generic evaluator for infinite series computations."""
+"""Generic evaluator for infinite series computations.
+
+Supports two styles:
+- Legacy: evaluate_series(formula_name, term_generator, terms, ...)
+- Formula-based (preferred): evaluate_formula(formula, terms,
+  accelerator='auto'|'direct'|'richardson'|'wynn-epsilon'|'levin-u'|'cvz', ...)
+
+The Formula path uses ratio() recurrence when available (no factorials),
+builds per-term partial sums, then applies the selected accelerator to the
+tail of the partial-sum sequence before mapping to constant space.
+"""
 
 from __future__ import annotations
 
@@ -7,6 +17,13 @@ from dataclasses import dataclass, field
 from typing import Any, Callable, List, Optional
 
 import mpmath as mp
+
+from .accelerators import ACCELERATORS, recommend
+
+try:
+    from .formula import SeriesFormula
+except ImportError:  # pragma: no cover - for direct script use
+    SeriesFormula = object  # type: ignore
 
 
 @dataclass
@@ -24,6 +41,8 @@ class SeriesResult:
     bound_label: Optional[str] = None
     status: str = "completed"
     elapsed_time: float = field(default_factory=float)
+    accelerator: str = "direct"
+    provenance: str = "proven"
 
     def to_dict(self) -> dict[str, Any]:
         """Convert result to dictionary for serialization."""
@@ -35,6 +54,8 @@ class SeriesResult:
             "partial_sum": mp.nstr(self.partial_sum, self.working_precision),
             "status": self.status,
             "elapsed_time": self.elapsed_time,
+            "accelerator": self.accelerator,
+            "provenance": self.provenance,
         }
 
         if self.final_term_magnitude is not None:
@@ -72,6 +93,111 @@ class SeriesEvaluator:
         # Use a local context to avoid affecting global mpmath state
         self.ctx = mp.workprec(precision)
 
+    # -- Formula-based path (preferred) ----------------------------------
+    def evaluate_formula(
+        self,
+        formula: "SeriesFormula",
+        terms: int,
+        accelerator: str = "auto",
+        compute_trace: bool = False,
+        use_recurrence: bool = True,
+        accel_window: int = 12,
+    ) -> SeriesResult:
+        """Evaluate a SeriesFormula with optional convergence acceleration."""
+        if terms < 1:
+            raise ValueError("terms must be a positive integer")
+        start_time = time.perf_counter()
+        if accelerator == "auto":
+            accelerator = recommend(
+                getattr(formula, "convergence_class", "direct"),
+                getattr(formula, "alternating", False),
+            )
+        accel_fn = ACCELERATORS.get(accelerator, ACCELERATORS["direct"])
+
+        with mp.workdps(self.precision):
+            partials: list[mp.mpf] = []
+            running = mp.mpf(0)
+            trace: list = []
+            t_n = mp.mpf(0)
+            # Iterative recurrence: t_0 via term(0), then ratio stepping.
+            ratio_fn = getattr(formula, "ratio", None)
+            use_rec = (
+                use_recurrence and callable(ratio_fn) and ratio_fn(0) is not None
+            )
+            if use_rec:
+                t_n = mp.mpf(formula.term(0))
+                for n in range(terms):
+                    if n > 0:
+                        assert ratio_fn is not None
+                        t_n = t_n * mp.mpf(ratio_fn(n - 1))
+                    running += t_n
+                    partials.append(+running)
+                    if compute_trace:
+                        trace.append((n, +running))
+            else:
+                for n in range(terms):
+                    t_n = mp.mpf(formula.term(n))
+                    running += t_n
+                    partials.append(+running)
+                    if compute_trace:
+                        trace.append((n, +running))
+
+            window = partials[-accel_window:] if len(partials) > accel_window else partials
+            try:
+                if accelerator == "direct":
+                    accel_sum = partials[-1]
+                elif accelerator == "levin-u":
+                    term_list = [partials[0]] + [
+                        partials[i] - partials[i - 1] for i in range(1, len(window))
+                    ]
+                    accel_sum = accel_fn(window, term_list)
+                else:
+                    accel_sum = accel_fn(window)
+            except Exception:
+                accel_sum = partials[-1]
+                accelerator = "direct(fallback)"
+
+            value = formula.transform(accel_sum)
+
+            analytic_bound = None
+            bound_label = None
+            try:
+                b = formula.tail_bound(terms, t_n)
+                if b is not None:
+                    # Ramanujan-style formulas need S_N mapping; support
+                    # optional transform_bound hook.
+                    hook = getattr(formula, "transform_bound", None)
+                    if callable(hook):
+                        # Recompute sum-space geometric bound here for the
+                        # Ramanujan case (q known analytically).
+                        q = mp.mpf(256) / mp.mpf(396**4) * mp.mpf(
+                            1 + mp.mpf(26390) / mp.mpf(1103)
+                        )
+                        b_sum = abs(t_n) / (mp.mpf(1) - q)
+                        analytic_bound = hook(b_sum, running)
+                    else:
+                        analytic_bound = b
+                    bound_label = "analytic truncation-error bound"
+            except Exception:
+                analytic_bound = None
+
+            elapsed = time.perf_counter() - start_time
+            return SeriesResult(
+                formula_name=getattr(formula, "name", "formula"),
+                terms_evaluated=terms,
+                working_precision=self.precision,
+                value=+value,
+                partial_sum=+running,
+                final_term_magnitude=abs(t_n),
+                trace=trace,
+                analytic_bound=analytic_bound,
+                bound_label=bound_label,
+                status="completed",
+                elapsed_time=elapsed,
+                accelerator=accelerator,
+                provenance=getattr(formula, "provenance", "proven"),
+            )
+
     def evaluate_series(
         self,
         formula_name: str,
@@ -95,8 +221,7 @@ class SeriesEvaluator:
         """
         start_time = time.perf_counter()
 
-        with self.ctx:
-            mp.mp.dps = self.precision
+        with mp.workdps(self.precision):
 
             partial_sum = mp.mpf(0)
             trace = [] if compute_trace else None
@@ -108,6 +233,7 @@ class SeriesEvaluator:
                 final_term = term
 
                 if compute_trace:
+                    assert trace is not None
                     trace.append((n, mp.mpf(partial_sum)))
 
             # Calculate final result (this will be formula-specific in subclasses)
@@ -235,57 +361,33 @@ def evaluate_ramanujan_pi(
     if precision < 1:
         raise ValueError("precision must be a positive integer")
 
-    evaluator = RamanujanPiEvaluator(precision)
+    from .formulas.catalogue import RamanujanPiFormula
 
-    # Ramanujan's formula components
-    # c_n = (4n)! / (n!)^4 / 396^(4n)
-    # t_n = c_n * (1103 + 26390*n)
-    # pi = 9801 / (2*sqrt(2)) * 1 / sum(t_n)
-
-    def compute_c_n(n: int) -> mp.mpf:
-        """Compute c_n using recurrence."""
-        with evaluator.ctx:
-            mp.mp.dps = evaluator.precision
-
-            if n == 0:
-                return mp.mpf(1)
-            else:
-                # Use recurrence: c_{n} = c_{n-1} * (4n-3)(4n-2)(4n-1)(4n) / (n^4 * 396^4)
-                c_prev = compute_c_n(n - 1)
-                numerator = (4*n - 3) * (4*n - 2) * (4*n - 1) * (4*n)
-                denominator = (n**4) * (396**4)
-                return c_prev * mp.mpf(numerator) / mp.mpf(denominator)
-
-    def term_generator(n: int) -> mp.mpf:
-        """Generate the nth term t_n = c_n * (1103 + 26390*n)."""
-        with evaluator.ctx:
-            mp.mp.dps = evaluator.precision
-            c_n = compute_c_n(n)
-            t_n = c_n * mp.mpf(1103 + 26390 * n)
-            return t_n
-
-    def bound_calculator(n: int, t_n: mp.mpf) -> mp.mpf:
-        """
-        Calculate the analytic bound for the Ramanujan series.
-        Based on the derivation in Section 4 of the plan.
-        """
-        with evaluator.ctx:
-            mp.mp.dps = evaluator.precision
-
-            # q = (256 / 396^4) * (1 + 26390/1103)
-            q = mp.mpf(256) / mp.mpf(396**4) * mp.mpf(1 + mp.mpf(26390)/mp.mpf(1103))
-
-            # Bound on remainder: T_N <= t_N / (1 - q)
-            bound = t_n / (mp.mpf(1) - q)
-            return bound
-
-    # Evaluate the series
-    result = evaluator.evaluate_series(
-        formula_name="Ramanujan's pi formula",
-        term_generator=term_generator,
-        terms=terms,
+    evaluator = SeriesEvaluator(precision)
+    result = evaluator.evaluate_formula(
+        RamanujanPiFormula(), terms, accelerator="direct",
         compute_trace=compute_trace,
-        bound_calculator=bound_calculator,
     )
-
+    # Legacy display name expected by CLI/tests.
+    result.formula_name = "Ramanujan's pi formula"
     return result
+
+
+def evaluate_formula_by_name(
+    name: str,
+    terms: int = 10,
+    precision: int = 50,
+    accelerator: str = "auto",
+    compute_trace: bool = False,
+) -> SeriesResult:
+    """Evaluate any catalogue formula by name with accelerator selection."""
+    if terms < 1:
+        raise ValueError("terms must be a positive integer")
+    if precision < 1:
+        raise ValueError("precision must be a positive integer")
+    from .formulas.catalogue import get_formula
+
+    formula = get_formula(name)
+    return SeriesEvaluator(precision).evaluate_formula(
+        formula, terms, accelerator=accelerator, compute_trace=compute_trace,
+    )
