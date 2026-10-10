@@ -1,1 +1,115 @@
-# infinite-series-research-v1
+# Ramanujan Infinite Series Engine
+
+A reliable arbitrary-precision engine for evaluating infinite series, starting with Ramanujan's rapidly convergent series for \(1/\pi\).
+
+## Features
+
+- **Arbitrary precision**: Uses `mpmath` for high-precision arithmetic
+- **Ramanujan's pi formula**: Implements the famous rapidly convergent series
+- **Recurrence relation**: Efficient computation without large factorials
+- **Analytic bounds**: Optional truncation-error bounds for validation
+- **Command-line interface**: Easy-to-use CLI for computations
+- **Well-tested**: Comprehensive test suite ensuring correctness
+
+## Installation
+
+```bash
+pip install -e .
+```
+
+## Usage
+
+### Basic CLI usage
+
+```bash
+# Compute pi with 1 term (default)
+ramanujan-pi pi
+
+# Specify number of terms and precision
+ramanujan-pi pi --terms 5 --precision 80
+
+# Get JSON output for programmatic use
+ramanujan-pi pi --terms 3 --precision 50 --json
+```
+
+### Python API
+
+```python
+from ramanujan_engine.evaluator import evaluate_ramanujan_pi
+
+# Evaluate with 3 terms at 50-digit precision
+result = evaluate_ramanujan_pi(terms=3, precision=50)
+print(f"Pi approximation: {result.value}")
+print(f"Terms: {result.terms_evaluated}")
+print(f"Precision: {result.working_precision} digits")
+
+# Access analytic bound if computed
+if result.analytic_bound:
+    print(f"Analytic bound: ±{result.analytic_bound}")
+```
+
+## Mathematical Background
+
+The engine implements Ramanujan's formula for \(1/\pi\):
+
+$$
+\frac{1}{\pi} = \frac{2\sqrt{2}}{9801} \sum_{n=0}^{\infty} \frac{(4n)!(1103+26390n)}{(n!)^4 396^{4n}}
+$$
+
+Key features:
+- **Rapid convergence**: Each term adds approximately 8 correct digits
+- **Recurrence relation**: Avoids computing large factorials directly
+  $$
+  c_{n+1} = c_n \frac{(4n+1)(4n+2)(4n+3)(4n+4)}{(n+1)^4 396^4}
+  $$
+  where \(c_n = \frac{(4n)!}{(n!)^4 396^{4n}}\)
+
+## Project Structure
+
+```
+src/
+└── ramanujan_engine/
+    ├── __init__.py
+    ├── cli.py              # Command-line interface
+    ├── evaluator.py        # Generic series evaluation engine
+    ├── formulas/
+    │   ├── __init__.py
+    │   └── ramanujan_pi.py # Ramanujan's pi formula implementation
+    └── tests/              # Test modules
+```
+
+## Testing
+
+Run the test suite:
+
+```bash
+pytest tests/
+```
+
+Or run individual test files:
+
+```bash
+python -m tests.test_ramanujan_pi
+python -m tests.test_evaluator
+python -m tests.test_cli
+```
+
+## Milestones
+
+This implementation covers **Milestone 1** from the project plan:
+- ✅ Python package with reusable series-evaluation API
+- ✅ Ramanujan's series for \(1/\pi\) using recurrence
+- ✅ Configurable terms and precision
+- ✅ Analytic truncation-error bound implementation
+- ✅ Command-line interface
+- ✅ Unit tests and benchmark tests
+- ✅ Documentation
+
+Future milestones will include:
+- Formula catalogue for other constants (\(\pi\), \(e\), \(\zeta(2)\), etc.)
+- Discovery workflow using PSLQ/integer-relation searches
+- Research interface with plotting and export capabilities
+
+## License
+
+MIT
