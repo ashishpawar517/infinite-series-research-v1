@@ -6,8 +6,8 @@ import argparse
 import sys
 from typing import Any
 
-from .evaluator import evaluate_ramanujan_pi
-from .formulas.ramanujan_pi import evaluate_ramanujan_pi_direct
+from .evaluator import evaluate_formula_by_name, evaluate_ramanujan_pi
+from .formulas.catalogue import list_formulas
 
 
 def format_output(result: dict[str, Any], show_trace: bool = False) -> str:
@@ -21,11 +21,15 @@ def format_output(result: dict[str, Any], show_trace: bool = False) -> str:
     Returns:
         Formatted string for display
     """
+    is_pi = "pi" in result['formula_name'].lower()
+    value_label = "Pi approximation" if is_pi else "Value"
     lines = [
         f"Formula: {result['formula_name']}",
-        f"Pi approximation: {result['value']}",
+        f"{value_label}: {result['value']}",
         f"Terms evaluated: {result['terms_evaluated']}",
         f"Working precision: {result['working_precision']} decimal digits",
+        f"Accelerator: {result.get('accelerator', 'direct')}",
+        f"Provenance: {result.get('provenance', 'proven')}",
     ]
 
     if result.get('analytic_bound') is not None:
@@ -48,12 +52,17 @@ def format_output(result: dict[str, Any], show_trace: bool = False) -> str:
 def main() -> None:
     """Main CLI entry point."""
     parser = argparse.ArgumentParser(
-        description="Evaluate Ramanujan's infinite series for 1/pi"
+        description="Evaluate Ramanujan's infinite series for 1/pi "
+        "(plus general catalogue: use 'list')"
     )
     parser.add_argument(
         "formula",
-        choices=["pi"],
-        help="Formula to evaluate (currently only 'pi' is supported)",
+        nargs="?",
+        default="pi",
+        help=(
+            "Formula to evaluate: 'pi' (Ramanujan, legacy), a catalogue name "
+            f"{list_formulas()}, or 'list' to show the catalogue"
+        ),
     )
     parser.add_argument(
         "--terms",
@@ -66,6 +75,13 @@ def main() -> None:
         type=int,
         default=50,
         help="Working precision in decimal digits",
+    )
+    parser.add_argument(
+        "--accelerator",
+        default="auto",
+        choices=["auto", "direct", "richardson", "wynn-epsilon", "shanks",
+                 "levin-u", "cvz", "alternating"],
+        help="Convergence accelerator (auto picks from formula metadata)",
     )
     parser.add_argument(
         "--trace",
@@ -81,21 +97,35 @@ def main() -> None:
     args = parser.parse_args()
 
     try:
+        if args.formula == "list":
+            print("Available formulas:")
+            for name in list_formulas():
+                print(f"  {name}")
+            print("Legacy alias: pi -> ramanujan-pi")
+            return
         if args.formula == "pi":
             result_obj = evaluate_ramanujan_pi(
                 terms=args.terms,
                 precision=args.precision,
                 compute_trace=args.trace,
             )
-            result_dict = result_obj.to_dict()
+        else:
+            result_obj = evaluate_formula_by_name(
+                args.formula,
+                terms=args.terms,
+                precision=args.precision,
+                accelerator=args.accelerator,
+                compute_trace=args.trace,
+            )
+        result_dict = result_obj.to_dict()
 
-            if args.json:
-                import json
-                print(json.dumps(result_dict, indent=2))
-            else:
-                print(format_output(result_dict, show_trace=args.trace))
+        if args.json:
+            import json
+            print(json.dumps(result_dict, indent=2))
+        else:
+            print(format_output(result_dict, show_trace=args.trace))
 
-    except ValueError as e:
+    except (KeyError, ValueError) as e:
         print(f"Error: {e}", file=sys.stderr)
         sys.exit(1)
     except Exception as e:
