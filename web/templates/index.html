@@ -1,0 +1,685 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <title>Reverse Series Engine</title>
+    <style>
+        :root{
+            box-sizing:border-box;
+            padding-top:env(safe-area-inset-top,0px);
+            padding-bottom:env(safe-area-inset-bottom,0px);
+            --bg:#faf9f7;
+            --card:#fff;
+            --ink:#1f1d1a;
+            --mut:#6b675f;
+            --bd:#e4e0d8;
+            --a:#c4572b;
+            --b:#2b6cc4;
+            --c:#2a8a5a;
+            --d:#9a62d6;
+            --e:#d4a017
+        }
+        html{scroll-padding-top:env(safe-area-inset-top,0px)}
+        @media (prefers-color-scheme:dark){
+            :root:not([data-theme="light"]){
+                --bg:#171614;
+                --card:#201f1c;
+                --ink:#ece9e2;
+                --mut:#9b968b;
+                --bd:#35322d;
+                --a:#e8835a;
+                --b:#6aa0e8;
+                --c:#58c48b
+            }
+        }
+        :root[data-theme="dark"]{
+            --bg:#171614;
+            --card:#201f1c;
+            --ink:#ece9e2;
+            --mut:#9b968b;
+            --bd:#35322d;
+            --a:#e8835a;
+            --b:#6aa0e8;
+            --c:#58c48b
+        }
+        body{
+            margin:0;
+            background:var(--bg);
+            color:var(--ink);
+            font:15px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif
+        }
+        main{
+            max-width:1000px;
+            margin:0 auto;
+            padding:20px 16px 40px
+        }
+        h1{
+            font-size:22px;
+            margin:0 0 2px
+        }
+        p.sub{
+            margin:0 0 16px;
+            color:var(--mut)
+        }
+        .row{
+            display:flex;
+            gap:8px
+        }
+        input{
+            flex:1;
+            min-width:0;
+            font:16px ui-monospace,Menlo,monospace;
+            padding:10px 12px;
+            border:1px solid var(--bd);
+            border-radius:8px;
+            background:var(--card);
+            color:var(--ink)
+        }
+        button{
+            font:inherit;
+            padding:10px 16px;
+            border:0;
+            border-radius:8px;
+            background:var(--a);
+            color:#fff;
+            cursor:pointer
+        }
+        .chips{
+            display:flex;
+            flex-wrap:wrap;
+            gap:6px;
+            margin:10px 0
+        }
+        .chips span{
+            font:13px ui-monospace,monospace;
+            padding:3px 9px;
+            border:1px solid var(--bd);
+            border-radius:99px;
+            cursor:pointer;
+            color:var(--mut)
+        }
+        #msg{
+            color:var(--a);
+            min-height:20px
+        }
+        .card{
+            background:var(--card);
+            border:1px solid var(--bd);
+            border-radius:12px;
+            padding:14px 16px;
+            margin-top:14px
+        }
+        .val{
+            font:22px ui-monospace,monospace;
+            word-break:break-all
+        }
+        .mut{
+            color:var(--mut);
+            font-size:13px
+        }
+        .grid{
+            display:grid;
+            grid-template-columns:repeat(auto-fit,minmax(290px,1fr));
+            gap:14px
+        }
+        .grid .card{
+            margin:0
+        }
+        code{
+            display:block;
+            font:13px ui-monospace,monospace;
+            background:var(--bg);
+            border-radius:6px;
+            padding:8px;
+            margin:8px 0;
+            overflow-x:auto;
+            white-space:pre-wrap;
+            word-break:break-word
+        }
+        table{
+            width:100%;
+            border-collapse:collapse;
+            font:12px ui-monospace,monospace
+        }
+        td,th{
+            text-align:left;
+            padding:2px 4px;
+            border-bottom:1px solid var(--bd)
+        }
+        .dot{
+            display:inline-block;
+            width:10px;
+            height:10px;
+            border-radius:50%;
+            margin-right:6px
+        }
+        .math{
+            overflow-x:auto;
+            overflow-y:hidden
+        }
+        mjx-container[display="true"]{
+            margin:.5em 0!important
+        }
+        canvas{
+            width:100%;
+            height:240px;
+            display:block
+        }
+    </style>
+    <script>
+        window.MathJax = {
+            tex: {
+                displayMath: [['\\[','\\]']],
+                inlineMath: []
+            },
+            svg: {
+                fontCache: 'none'
+            },
+            startup: {
+                typeset: false
+            }
+        };
+        const typeset = () => {
+            if (window.MathJax && MathJax.typesetPromise) {
+                return MathJax.typesetPromise().catch(() => {});
+            }
+            return Promise.resolve();
+        };
+    </script>
+    <script async src="https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-svg.js"
+            onload="window.MathJax.startup.promise.then(typeset).then(typeset)">
+    </script>
+</head>
+<body>
+    <main>
+        <h1>Reverse Series Engine</h1>
+        <p class="sub">Type an expression. Get infinite series, written as math, that converge to its value.</p>
+        <div class="row">
+            <input id="in" value="2/root(2)*3" spellcheck="false" autocomplete="off">
+            <button id="go">Build series</button>
+        </div>
+        <div class="chips" id="chips"></div>
+        <div id="msg"></div>
+        <div class="card">
+            <div class="mut">Target value (double precision)</div>
+            <div class="val" id="val"></div>
+            <div class="mut" id="det"></div>
+        </div>
+        <div class="card">
+            <b>Convergence</b>
+            <span class="mut">log₁₀ |partial sum − target| vs terms</span>
+            <canvas id="cv"></canvas>
+            <div id="leg" class="mut"></div>
+        </div>
+        <div class="grid" id="cards" style="margin-top:14px"></div>
+        <p class="mut">
+            Supports + − * / ^, sqrt/root, ln, exp, sin, cos, pi, e.
+            Values needing more than ~15 digits are limited by double precision.
+        </p>
+    </main>
+
+    <script>
+        const $ = s => document.querySelector(s);
+
+        // Expression parser (ported from the original)
+        function parse(src){
+            let s = src.replace(/\s+/g,'').replace(/√/g,'sqrt').replace(/root/g,'sqrt').replace(/π/g,'pi');
+            let i = 0;
+            const F = {sqrt:Math.sqrt,ln:Math.log,log:Math.log,exp:Math.exp,sin:Math.sin,cos:Math.cos,abs:Math.abs};
+            const err = m => {throw new Error(m)};
+
+            const expr = () => {
+                let v = term();
+                while(s[i]=='+'||s[i]=='-'){
+                    const o = s[i++];
+                    const r = term();
+                    v = o=='+' ? v+r : v-r;
+                }
+                return v;
+            };
+
+            const term = () => {
+                let v = un();
+                for(;;){
+                    const c = s[i]||'';
+                    if(c=='*'||c=='/'){
+                        i++;
+                        const r = un();
+                        v = c=='*' ? v*r : v/r;
+                    } else if(/[a-z(\d.]/.test(c)){
+                        v *= pw();
+                    } else {
+                        break;
+                    }
+                }
+                return v;
+            };
+
+            const un = () => {
+                if(s[i]=='-'){
+                    i++;
+                    return -un();
+                }
+                if(s[i]=='+'){
+                    i++;
+                    return un();
+                }
+                return pw();
+            };
+
+            const pw = () => {
+                const b = at();
+                if(s[i]=='^'){
+                    i++;
+                    return Math.pow(b,un());
+                }
+                return b;
+            };
+
+            const at = () => {
+                if(s[i]=='('){
+                    i++;
+                    const v = expr();
+                    if(s[i++]!=')') err('Missing )');
+                    return v;
+                }
+                let m = /^(\d+\.?\d*|\.\d+)/.exec(s.slice(i));
+                if(m){
+                    i+=m[0].length;
+                    return +m[0];
+                }
+                m = /^[a-z]+/.exec(s.slice(i));
+                if(m){
+                    const n = m[0];
+                    i+=n.length;
+                    if(n=='pi') return Math.PI;
+                    if(n=='e') return Math.E;
+                    if(F[n]){
+                        if(s[i]!='(') err('Use '+n+'(...)');
+                        i++;
+                        const v = expr();
+                        if(s[i++]!=')') err('Missing )');
+                        return F[n](v);
+                    }
+                    err('Unknown name: '+n);
+                }
+                err('Unexpected '+(s[i]||'end of input'));
+            };
+
+            const v = expr();
+            if(i<s.length) err('Unexpected '+s[i]);
+            if(!isFinite(v)) err('Value is not finite');
+            return v;
+        }
+
+        const gcd = (a,b) => b ? gcd(b,a%b) : Math.abs(a);
+
+        function conv(v,maxQ){
+            const o = [];
+            let h1=1,h0=0,k1=0,k0=1,x=v;
+            for(let n=0;n<30;n++){
+                const a = Math.floor(x);
+                const h = a*h1+h0;
+                const k = a*k1+k0;
+                if(k>maxQ) break;
+                o.push([h,k]);
+                h0=h1; h1=h;
+                k0=k1; k1=k;
+                const f = x-a;
+                if(f<1e-12) break;
+                x = 1/f;
+            }
+            return o;
+        }
+
+        const N = 40;
+
+        function sqrtSeries(x){
+            try{
+                if(conv(x,1000).some(([p,q]) => Math.abs(p/q-x)<1e-12*x)) return null;
+
+                const r = conv(x*x,3000).find(([p,q]) => Math.abs(p/q-x*x)<1e-10*Math.max(1,x*x));
+                if(!r) return null;
+
+                const [P,Q] = r;
+                const U = (a,b) => (P*b*b - Q*a*a)/(Q*a*a);
+                const cs = conv(x,500).filter(c => c[0]>0);
+                if(!cs.length) return null;
+
+                const [a,b] = cs.find(c => Math.abs(U(...c))<.2) ||
+                            cs.reduce((m,c) => Math.abs(U(...c))<Math.abs(U(...m)) ? c : m);
+                const u = U(a,b);
+
+                let num = P*b*b - Q*a*a;
+                let den = Q*a*a;
+                let g = gcd(num,den);
+                num/=g; den/=g;
+
+                const t = [];
+                let co=1, pu=1;
+                for(let k=0;k<N;k++){
+                    if(k){
+                        co*=(.5-(k-1))/k;
+                        pu*=u;
+                    }
+                    t.push(a/b*co*pu);
+                }
+
+                const sqrtArg = Q==1 ? P : `\\frac{${P}}{${Q}}`;
+                const fracPart = b==1 ? a : `\\frac{${a}}{${b}}`;
+
+                return {
+                    tex: `$${Q==1 ? `\\sqrt{${P}}` : `\\sqrt{\\frac{${P}}{${Q}}}$} = ${b==1 ? a : `\\frac{${a}}{${b}}$}\\sum_{n=0}^{\\infty}\\binom{1/2}{n}\\left(\\frac{${num}}{${den}}\\right)^{n}$`,
+                    note: `From √(1+u) = Σ C(1/2,n)uⁿ, valid for |u|&lt;1. Here u = ${num}/${den}+.`,
+                    name: 'Binomial series (exact structure)',
+                    color: '--a',
+                    det: `Detected x² = ${P}/${Q}, so x = √(${P}/${Q})`,
+                    formula: `x = (${a}/${b}) · Σ C(1/2,k) · (${num}/${den})^k\nfrom √(1+u) = Σ C(1/2,k) u^k, valid for |u|<1`,
+                    terms: t
+                };
+            } catch(e) {
+                return null;
+            }
+        }
+
+        function expSeries(x){
+            try{
+                const L = Math.log(x);
+                const t = [];
+                let p = 1;
+                for(let k=0;k<N;k++){
+                    if(k) p *= L/k;
+                    t.push(p);
+                }
+
+                return {
+                    tex: `x=\\sum_{n=0}^{\\infty}\\frac{(\\ln x)^{n}}{n!},\\quad \\ln x=${L.toPrecision(10)}`,
+                    note: 'From eˣ = Σ xⁿ/n!, converges for every real input. It feeds ln x in, so it is universal but not deep.',
+                    name: 'Exponential series (universal)',
+                    color: '--b',
+                    formula: `x = Σ (ln x)^k / k!\nln x = ${L.toPrecision(12)}\nfrom eˣ = Σ xᵏ/k!, converges for every real input`,
+                    terms: t
+                };
+            } catch(e) {
+                return null;
+            }
+        }
+
+        function engelSeries(x){
+            try{
+                const n = Math.floor(x);
+                const t = n ? [n] : [];
+                const a = [];
+                let u = x-n, prod=1;
+
+                while(u>1e-13&&a.length<25&&prod<1e15){
+                    const ai = Math.ceil(1/u);
+                    a.push(ai);
+                    prod*=ai;
+                    t.push(1/prod);
+                    u=u*ai-1;
+                }
+
+                return {
+                    tex: `x=${n?n+'+':''}\\sum_{k=1}^{\\infty}\\frac{1}{a_1a_2\\cdots a_k}`,
+                    note: `Engel expansion, a = [${a.join(', ')}]`,
+                    name: 'Engel series (greedy, any positive real)',
+                    color: '--c',
+                    formula: `x = ${n} + Σ 1/(a₁a₂⋯aₖ)\na = [${a.join(', ')}]\nEngel (1913): aₖ₊₁ ≥ aₖ, terms shrink at least geometrically`,
+                    terms: t
+                };
+            } catch(e) {
+                return null;
+            }
+        }
+
+        const R = String.raw;
+
+        function piSeries(x){
+            const o = [];
+            const ok = v => conv(v,200).find(([p,q]) => p>0 && Math.abs(p/q-v)<1e-11*v);
+
+            try{
+                let r = ok(x*Math.PI);
+                if(r){
+                    const [p,q] = r;
+                    const c = p/q;
+                    const lhs = `\\frac{${p}}{${q==1?'':q}\\pi}`;
+                    const pre = c==1 ? '' : `\\frac{${p}}{${q}}\\cdot `;
+                    const rm = [];
+                    const ch = [];
+                    let T=1, M=1;
+
+                    for(let n=0;n<N;n++){
+                        if(n){
+                            T*=4*n*(4*n-1)*(4*n-2)*(4*n-3)/(n**4*396**4);
+                            M*=6*n*(6*n-1)*(6*n-2)*(6*n-3)*(6*n-4)*(6*n-5)/(3*n*(3*n-1)*(3*n-2)*n**3*640320**3);
+                        }
+                        rm.push(c*2*Math.SQRT2/9801*T*(1103+26390*n));
+                        ch.push(c*12/640320**1.5*(-1)**n*M*(13591409+545140134*n));
+                    }
+
+                    o.push({
+                        name: 'Ramanujan 1914 (~8 digits/term)',
+                        tex: `$${lhs} = ${pre}\\frac{2\\sqrt{2}}{9801}\\sum_{n=0}^{\\infty}\\frac{(4n)!\\,(1103+26390n)}{(n!)^{4}\\,396^{4n}}$`,
+                        note: 'Ramanujan 1914. Each term adds about 8 correct digits.',
+                        color: '--d',
+                        terms: rm
+                    });
+
+                    o.push({
+                        name: 'Chudnovsky (~14 digits/term)',
+                        tex: `$${lhs} = ${pre}\\frac{12}{640320^{3/2}}\\sum_{n=0}^{\\infty}\\frac{(-1)^{n}(6n)!\\,(13591409+545140134n)}{(3n)!\\,(n!)^{3}\\,640320^{3n}}$`,
+                        note: 'Chudnovsky 1987. Each term adds about 14 correct digits.',
+                        color: '--e',
+                        terms: ch
+                    });
+                }
+
+                r = ok(x/Math.PI);
+                if(r){
+                    const [p,q] = r;
+                    const c = p/q;
+                    const k = c==1 ? '' : `\\frac{${p}}{${q}}`;
+                    const t = [];
+                    for(let n=0;n<N;n++){
+                        t.push(c*(-1)**n/(2*n+1)*(16/5**(2*n+1)-4/239**(2*n+1)));
+                    }
+
+                    o.push({
+                        name: 'Machin formula (~1.4 digits/term)',
+                        tex: `$${k}\\pi = ${k}\\sum_{n=0}^{\\infty}\\frac{(-1)^{n}}{2n+1}\\left(\\frac{16}{5^{2n+1}}-\\frac{4}{239^{2n+1}}\\right)$`,
+                        note: 'Machin 1706: π = 16 arctan(1/5) − 4 arctan(1/239), expanded as one series.',
+                        color: '--d',
+                        terms: t
+                    });
+                }
+            } catch(e) {
+                // Silently ignore errors in pi series generation
+            }
+
+            return o;
+        }
+
+        let cur = [];
+
+        async function run(){
+            const src = $('#in').value;
+            let x;
+
+            try{
+                x = parse(src);
+                if(!(x>0)) throw new Error('Needs a positive value (got '+x+')');
+            } catch(e){
+                $('#msg').textContent = e.message;
+                return;
+            }
+
+            $('#msg').textContent = '';
+            $('#val').textContent = x.toPrecision(15);
+
+            try{
+                const response = await fetch('/compute', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({expression: src})
+                });
+
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.error || 'Unknown error');
+                }
+
+                const data = await response.json();
+
+                // Update UI with results
+                $('#val').textContent = data.value_precision;
+                $('#det').textContent = '';
+
+                // Clear previous results
+                $('#cards').innerHTML = '';
+
+                // Process series results
+                cur = data.series.map((s, index) => {
+                    // Assign colors if not present
+                    if (!s.color) {
+                        const colors = ['--a', '--b', '--c', '--d', '--e'];
+                        s.color = colors[index % colors.length];
+                    }
+
+                    // Calculate partial sums and errors
+                    let a = 0;
+                    s.ps = s.terms.map(t => a += t);
+                    s.err = s.ps.map(p => Math.abs(p - x));
+
+                    const k = s.err.findIndex(e => e < 1e-12);
+                    const rows = s.terms.slice(0,6).map((t,i) =>
+                        `<tr><td>${i}</td><td>${t.toPrecision(8)}</td><td>${s.ps[i].toPrecision(12)}</td></tr>`
+                    ).join('');
+
+                    return {
+                        ...s,
+                        ps: s.ps,
+                        err: s.err,
+                        k: k,
+                        rows: rows
+                    };
+                });
+
+                // Render cards
+                cur.forEach(s => {
+                    $('#cards').insertAdjacentHTML('beforeend',
+                        `<div class="card">
+                            <b><span class="dot" style="background:var(${s.color})"></span>${s.name}</b>
+                            <div class="math">\\[${s.tex}\\]</div>
+                            <div class="mut">${s.note||''}</div>
+                            <div class="mut">${s.k<0 ? `Did not reach 1e-12 in ${s.terms.length} terms` : `Reaches 1e-12 after ${s.k+1} terms`}</div>
+                            <table>
+                                <tr><th>k</th><th>term</th><th>partial sum</th></tr>
+                                ${s.rows}
+                            </table>
+                        </div>`
+                    );
+                });
+
+                // Update legend
+                $('#leg').innerHTML = cur.map(s =>
+                    `<span style="margin-right:14px"><span class="dot" style="background:var(${s.color})"></span>${s.name.split(' (')[0]}</span>`
+                ).join('');
+
+                // Draw convergence graph
+                draw();
+                typeset();
+
+            } catch(error) {
+                $('#msg').textContent = error.message;
+                console.error(error);
+            }
+        }
+
+        function draw(){
+            const c = $('#cv');
+            const d = devicePixelRatio||1;
+            const W = c.clientWidth;
+            const H = c.clientHeight;
+            c.width = W*d;
+            c.height = H*d;
+            const g = c.getContext('2d');
+            const cs = getComputedStyle(document.documentElement);
+            const col = n => cs.getPropertyValue(n).trim();
+            g.scale(d,d);
+
+            const L = 38, B = 22, T = 6, R = 8;
+            const mx = Math.max(10, ...cur.map(s => s.err.length));
+            const X = n => L + (W-L-R)*n/mx;
+            const Y = e => T + (H-T-B)*(-Math.log10(Math.max(e,1e-17)))/17;
+
+            g.font = '11px system-ui';
+            g.fillStyle = col('--mut');
+            g.strokeStyle = col('--bd');
+
+            // Draw horizontal grid lines
+            for(let y=0;y<=16;y+=4){
+                g.beginPath();
+                g.moveTo(L, Y(10**-y));
+                g.lineTo(W-R, Y(10**-y));
+                g.stroke();
+                g.fillText('-'+y, 8, Y(10**-y)+4);
+            }
+
+            // Draw vertical grid lines
+            for(let n=0;n<=mx;n+=10){
+                g.fillText(n, X(n)-4, H-6);
+            }
+
+            // Draw series curves
+            cur.forEach(s => {
+                g.strokeStyle = col(s.color);
+                g.lineWidth = 2;
+                g.beginPath();
+                s.err.forEach((e,i) => {
+                    const px = X(i+1);
+                    const py = Y(e);
+                    if(i === 0){
+                        g.moveTo(px, py);
+                    } else {
+                        g.lineTo(px, py);
+                    }
+                });
+                g.stroke();
+            });
+        }
+
+        // Pre-load some example expressions
+        ['2/root(2)*3','pi','sqrt(2)+sqrt(3)','e^2','ln(10)','(1+sqrt(5))/2','7/3'].forEach(e => {
+            const s = document.createElement('span');
+            s.textContent = e;
+            s.onclick = () => {
+                $('#in').value = e;
+                run();
+            };
+            $('#chips').append(s);
+        });
+
+        // Event listeners
+        $('#go').onclick = run;
+        $('#in').onkeydown = e => {
+            if(e.key === 'Enter') run();
+        };
+
+        // Handle resize and theme changes
+        addEventListener('resize', () => {
+            if(cur.length) draw();
+        });
+        matchMedia('(prefers-color-scheme:dark)').onchange = () => {
+            if(cur.length) draw();
+        };
+
+        // Initial run
+        run();
+    </script>
+</body>
+</html>
